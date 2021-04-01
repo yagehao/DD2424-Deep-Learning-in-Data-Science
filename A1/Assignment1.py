@@ -98,6 +98,8 @@ class Classifier():
 		Returns:
 			J (float): cross-entropy loss
 		"""
+		N = X.shape[1]
+
 		P = self.evaluateClassifier(X)
 		l_cross = -np.log(Y*P)
 		regul = lam * np.sum(self.W**2)
@@ -105,9 +107,21 @@ class Classifier():
 		J = 1/N * np.sum(l_cross) + regul
 		return J
 
-	
+	def computeAccuracy(self, X, y):
+		"""Compute the accuracy of the network's predictions.
 
+		Args:
+			X (np.ndarray): data matrix, dxn.
+			y (np.ndarray): vector of labels, n.
 
+		Returns:
+			acc (float): accuracy.
+		"""
+		pred = np.argmax(self.evaluateClassifier(X), axis=0)
+		pred_true = pred.T[pred == np.asarray(y)].shape[0] #https://stackoverflow.com/questions/48134598/x-shape0-vs-x0-shape-in-numpy
+
+		acc = pred_true/X.shape[1]
+		return acc
 
 
 
