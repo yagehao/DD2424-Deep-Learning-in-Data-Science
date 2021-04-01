@@ -6,8 +6,11 @@ import pickle #模块 pickle 实现了对一个 Python 对象结构的二进制�
 import numpy as np
 import matplotlib.pyplot as plt 
 
+K = 10
+n = 10000
+d = 3072
 
-def LoadBatch(filename):
+def loadBatch(filename):
 	"""Reads in the data from a CIFAR-10 batch file 
 	and returns the image and label data in separate files.
 
@@ -31,7 +34,7 @@ def LoadBatch(filename):
 							  #https://stackoverflow.com/questions/45068853/how-does-this-one-hot-vector-conversion-work
 	return X, Y, y
 
-def Preprocess(X):
+def preprocess(X):
 	"""Standarization.
 
 	Args:
@@ -49,17 +52,95 @@ def Preprocess(X):
 	X = (X - mean_X)/std_X #dxn: 3072x10000
 	return X
 
+class Classifier():
+	def __init__(self, data, W=None, b=None):
+		"""Construct a class.
+
+		Args:
+			data (dict):
+                - training, validation and testing:
+                    - examples matrix
+                    - one-hot-encoded labels matrix
+                    - labels vector
+			W (np.ndarray): model weight parameters, Kxd.
+			b (np.ndarray): model bias parameters, Kx1.
+		"""		
+		np.random.seed(100)
+		self.W = np.random.normal(0, 0.01, (K, d)) #initialize model parameters
+		self.b = np.random.normal(0, 0.01, (K, 1))
+
+	def evaluateClassifier(self, X):
+		"""Compute p=softmax(s).
+
+		Args:
+			X (np.ndarray): data matrix, dxn.
+			
+		Returns:
+			P (np.ndarray): softmax matrix, Kxn,
+							each col contains probability of each label 
+							for the image in the corresponding col of X.
+		"""
+		s = np.dot(self.W, X) + self.b 
+		def softmax(s):
+			softmax = np.exp(s) / np.sum(np.exp(s))
+			return softmax
+		P = softmax(s)
+		return P
+
+	def computeCost(self, X, Y, lam):
+		"""Compute cost function.
+
+		Args:
+			X (np.ndarray): data matrix, dxn
+			Y (np.ndarray): one hot representation of labels, Kxn
+			lam (float): regularization term
+
+		Returns:
+			J (float): cross-entropy loss
+		"""
+		P = self.evaluateClassifier(X)
+		l_cross = -np.log(Y*P)
+		regul = lam * np.sum(self.W**2)
+
+		J = 1/N * np.sum(l_cross) + regul
+		return J
+
+	
+
+
+
+
+
+
+
+
 
 
 
 def main():
-	Xtrain, Ytrain, ytrain = LoadBatch("Datasets/cifar-10-batches-py/data_batch_1")
-	Xval, Yval, yval = LoadBatch("Datasets/cifar-10-batches-py/data_batch_2")
-	Xtest, Ytest, ytest = LoadBatch("Datasets/cifar-10-batches-py/test_batch")
+	trainX, trainY, trainy = loadBatch("Datasets/cifar-10-batches-py/data_batch_1")
+	valX, valY, valy = loadBatch("Datasets/cifar-10-batches-py/data_batch_2")
+	testX, testY, testy = loadBatch("Datasets/cifar-10-batches-py/test_batch")
 
-	Xtrain = Preprocess(Xtrain)
-	Xval = Preprocess(Xval)
-	Xtest = Preprocess(Xtest)
+	trainX = preprocess(trainX)
+	valX = preprocess(valX)
+	testX = preprocess(testX)
+
+	data = {
+		'trainX': trainX,
+		'trainY': trainY, 
+		'trainy': trainy,
+		'valX': valX,
+		'valY': valY,
+		'valy': valy,
+		'testX': testX,
+		'testY': testY,
+		'testy': testy
+	}
+
+	#q4: check function run
+	clf = Classifier(data)
+	P = clf.evaluateClassifier(trainX[:, :100]) #10x100
 
 if __name__ == "__main__":
 	main()
