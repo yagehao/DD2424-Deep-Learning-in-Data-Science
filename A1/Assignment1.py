@@ -207,7 +207,7 @@ class Classifier():
 			plt.savefig("Result_Pics/performance.png", bbox_inches='tight')
 
 
-	def minibatchGD(self, X, Y, lam=0, n_batch=100, eta=0.1, n_epochs=20, performPlot=False, text=False):
+	def minibatchGD(self, X, Y, lam=0, n_batch=100, eta=0.1, n_epochs=40, performPlot=False, text=False):
 		"""Model training with mini-batch gradient descent.
 
 		Args:
@@ -286,7 +286,7 @@ class Classifier():
 			ax.set_title('Category = ' + title, fontsize=15)
 
 			if save==True:
-				plt.savefig("Result_Pics/" + str(num) + "_" + title + ".png", bbox_inches="tight")
+				plt.savefig("Result_Pics/" + str(plotNum) + "_" + title + ".png", bbox_inches="tight")
 
 			plt.show()
 
@@ -319,10 +319,10 @@ def main():
 	P = clf.evaluateClassifier(trainX[:, :100]) #10x100
 	print("P computing completed!")
 
-	lams = [0, 0, 0.1]
-	etas = [0.1, 0.01, 0.01] 
+	lams = [0, 0, 0.1, 1]
+	etas = [0.1, 0.001, 0.001, 0.001] 
 
-	for i in range(3):
+	for i in range(4):
 		print("i =", i)
 
 		trainAccuSet = []
@@ -345,6 +345,13 @@ def main():
 		print("testing accuracy:", testAccuSet, '\n')
 
 		clf.visualization(plotNum=i)
+
+		print("training mean:", np.mean(trainAccuSet))
+		print("training std:", np.std(trainAccuSet))
+		print("validation mean:", np.mean(valAccuSet))
+		print("validation std:", np.std(valAccuSet))
+		print("testing mean:", np.mean(testAccuSet))
+		print("testing std:", np.std(testAccuSet))
 
 if __name__ == "__main__":
 	main()
