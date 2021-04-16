@@ -498,9 +498,9 @@ def fit(valsize=5000):
 		print(i)
 		clf = Classifier(data, labels)
 		trainAcc, valAcc, testAcc = clf.minibatchGD( #adjust parameters
-			data['trainX'], data['trainY'], lam=0,
+			data['trainX'], data['trainY'], lam=0.002,
 			batchsize=100, eta_min=1e-5, eta_max=1e-1, n_s=500,
-			epochs=20, text=False, plot=False) #two cycle
+			epochs=20, text=False, plot=True) #two cycle
 		acc_train_set.append(trainAcc)
 		acc_val_set.append(valAcc)
 		acc_test_set.append(testAcc)
@@ -516,7 +516,7 @@ if __name__ == "__main__":
 
 	#replicate()
 
-	fit(valsize=5000) #adjust size of validation set
+	fit(valsize=1000) #adjust size of validation set
 
 	#test numerically and analytically computed gradients
 	#unittest.main()
