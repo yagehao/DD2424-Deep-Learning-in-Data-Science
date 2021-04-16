@@ -6,10 +6,12 @@ import pickle
 import numpy as np 
 import matplotlib.pyplot as plt 
 import unittest
+import statistics
 
 K = 10
 n = 10000
 d = 3072
+#np.random.seed(100)
 
 
 def loadBatch(filename):
@@ -61,6 +63,7 @@ def preprocess(X):
 
 
 class Classifier():
+	#adjust number of hidden layer nodes
 	def __init__(self, data, labels, m=50, W1=None, W2=None, b1=None, b2=None):
 		"""set up the data structure for the parameters of the network 
 		and initialize their values.
@@ -180,7 +183,7 @@ class Classifier():
 		"""
 		n = X.shape[1]
 		h, p = self.evaluateClassifier(X)
-		l = 1/n * np.sum(- Y*np.log(p))
+		l = 1/n * - np.sum(Y*np.log(p))
 		J = l + lam * (np.sum(self.W1**2) + np.sum(self.W2**2))
 		return l, J
 
@@ -326,17 +329,17 @@ class Classifier():
 				self.b2 -= eta * b2grad
 
 				#cyclic learning rate
-				tl = t % (2*n_s)
-				if tl <= n_s:
-					eta = eta_min + tl * (eta_max - eta_min) / n_s
-				elif tl <= 2*n_s:
-					eta = eta_max - (tl - n_s) * (eta_max - eta_min) / n_s 
-				t += 1
+				if t <= n_s:
+					eta = eta_min + t * (eta_max - eta_min) / n_s
+				elif t <= 2*n_s:
+					eta = eta_max - (t - n_s) * (eta_max - eta_min) / n_s 
+				t = (t+1) % (2*n_s)
 
 			if plot==True:
-				loss_train_ls[i], cost_train_ls[i] = self.computeCost(self.trainX, self.trainY, lam)
+				loss_train_ls[i], cost_train_ls[i] = self.computeCost(X, Y, lam)
 				loss_val_ls[i], cost_val_ls[i] = self.computeCost(self.valX, self.valY, lam)
 				acc_train_ls[i] = self.computeAccuracy(self.trainX, self.trainy)
+				print(acc_train_ls[i])
 				acc_val_ls[i] = self.computeAccuracy(self.valX, self.valy)
 
 		trainAcc = self.computeAccuracy(self.trainX, self.trainy)
@@ -349,18 +352,19 @@ class Classifier():
 			print("testing accuracy:", str(testAcc))
 
 		if plot==True:
-			def fplot(xvalue, yvalue1, yvalue2, title, y_label):
+			def fplot(xvalue, yvalue1, yvalue2, title, y_label, y_min, y_max):
 				fig, ax = plt.subplots(figsize = (10, 8))
 				ax.plot(xvalue, yvalue1, label='training')
 				ax.plot(xvalue, yvalue2, label='validation')
 				ax.legend()
 				ax.set(xlabel='Number of epochs', ylabel=y_label)
+				ax.set_ylim([y_min, y_max])
 				ax.grid()
 				plt.show()
 
-			fplot(np.arange(epochs), cost_train_ls, cost_val_ls, 'Cost Plot', 'Cost')
-			fplot(np.arange(epochs), loss_train_ls, loss_val_ls, 'Loss Plot', 'Loss')
-			fplot(np.arange(epochs), acc_train_ls, acc_val_ls, 'Accuracy Plot', 'Accuracy')
+			fplot(np.arange(epochs), cost_train_ls, cost_val_ls, 'Cost Plot', 'Cost', 0, 4)
+			fplot(np.arange(epochs), loss_train_ls, loss_val_ls, 'Loss Plot', 'Loss', 0, 3)
+			fplot(np.arange(epochs), acc_train_ls, acc_val_ls, 'Accuracy Plot', 'Accuracy', 0, 1)
 
 		return trainAcc, valAcc, testAcc
 
@@ -411,7 +415,7 @@ class TestEqualityMethods(unittest.TestCase):
 		self.assertEqual(anab2grad, numb2grad)
 
 
-def figure3():
+def replicate():
 	#read in data
 	trainX, trainY, trainy = loadBatch("Datasets/cifar-10-batches-py/data_batch_1")
 	valX, valY, valy = loadBatch("Datasets/cifar-10-batches-py/data_batch_2")
@@ -435,13 +439,84 @@ def figure3():
 		'testy': testy
 	}
 
-	#replicate figure 3
 	clf = Classifier(data, labels)
-	clf.minibatchGD(data['trainX'], data['trainY'])
+	clf.minibatchGD(data['trainX'], data['trainY'], lam=0.01,
+			batchsize=100, eta_min=1e-5, eta_max=1e-1, n_s=500, epochs=10,
+			plot=True, text=True) #replicate figure 3
+	clf.minibatchGD(data['trainX'], data['trainY'], lam=0.01,
+			batchsize=100, eta_min=1e-5, eta_max=1e-1, n_s=800, epochs=48,
+			plot=True, text=True) #replicate figure4
+
+def fit(valsize=5000):
+	"""fit the best classifier.
+
+	Args:
+		valsize (int): size of the validation set.
+	"""
+	#read in all 5 batches of data
+	trainX1, trainY1, trainy1 = loadBatch("Datasets/cifar-10-batches-py/data_batch_1")
+	trainX2, trainY2, trainy2 = loadBatch("Datasets/cifar-10-batches-py/data_batch_2")
+	trainX3, trainY3, trainy3 = loadBatch("Datasets/cifar-10-batches-py/data_batch_3")
+	trainX4, trainY4, trainy4 = loadBatch("Datasets/cifar-10-batches-py/data_batch_4")
+	trainX5, trainY5, trainy5 = loadBatch("Datasets/cifar-10-batches-py/data_batch_5")
+	testX, testY, testy = loadBatch("Datasets/cifar-10-batches-py/test_batch")
+
+	trainX = np.concatenate((trainX1, trainX2, trainX3, trainX4, trainX5), axis=1)
+	trainY = np.concatenate((trainY1, trainY2, trainY3, trainY4, trainY5), axis=1)
+	trainy = np.concatenate((trainy1, trainy2, trainy3, trainy4, trainy5))
+
+	valX = trainX[:, -valsize:]
+	valY = trainY[:, -valsize:]
+	valy = trainy[-valsize:]
+
+	trainX = trainX[:, :-valsize]
+	trainY = trainY[:, :-valsize]
+	trainy = trainy[:-valsize]
+
+	trainX = preprocess(trainX)
+	valX = preprocess(valX)
+	testX = preprocess(testX)
+
+	labels = unpickle('Datasets/cifar-10-batches-py/batches.meta')[ b'label_names']
+
+	data = {
+		'trainX': trainX,
+		'trainY': trainY, 
+		'trainy': trainy,
+		'valX': valX,
+		'valY': valY,
+		'valy': valy,
+		'testX': testX,
+		'testY': testY,
+		'testy': testy
+	}
+
+	acc_train_set = []
+	acc_val_set = []
+	acc_test_set = []
+	for i in range(1):
+		print(i)
+		clf = Classifier(data, labels)
+		trainAcc, valAcc, testAcc = clf.minibatchGD( #adjust parameters
+			data['trainX'], data['trainY'], lam=0,
+			batchsize=100, eta_min=1e-5, eta_max=1e-1, n_s=500,
+			epochs=20, text=False, plot=False) #two cycle
+		acc_train_set.append(trainAcc)
+		acc_val_set.append(valAcc)
+		acc_test_set.append(testAcc)
+
+	print('training accuracy:', statistics.mean(acc_train_set))
+	print('validation accuracy:', statistics.mean(acc_val_set))
+	print('testing accuracy:', statistics.mean(acc_test_set))
+	#print('standard deviation of training accuracy:', statistics.stdev(acc_train_set))
+	#print('standard deviation of validation accuracy:', statistics.stdev(acc_val_set))
+	#print('standard deviation of testing accuracy:', statistics.stdev(acc_test_set))
 
 if __name__ == "__main__":
-	#replicate figure 3
-	figure3()
+
+	#replicate()
+
+	fit(valsize=5000) #adjust size of validation set
 
 	#test numerically and analytically computed gradients
-	unittest.main()
+	#unittest.main()
