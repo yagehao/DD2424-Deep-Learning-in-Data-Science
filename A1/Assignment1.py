@@ -207,7 +207,7 @@ class Classifier():
 			plt.savefig("Result_Pics/performance.png", bbox_inches='tight')
 
 
-	def minibatchGD(self, X, Y, lam=0, n_batch=100, eta=0.1, n_epochs=40, performPlot=False, text=False):
+	def minibatchGD(self, X, Y, lam=0, n_batch=100, eta=0.1, n_epochs=40, performPlot=True, text=True):
 		"""Model training with mini-batch gradient descent.
 
 		Args:
@@ -320,7 +320,7 @@ def main():
 	print("P computing completed!")
 
 	lams = [0, 0, 0.1, 1]
-	etas = [0.1, 0.001, 0.001, 0.001] 
+	etas = [0.1, 0.01, 0.01, 0.01] 
 
 	for i in range(4):
 		print("i =", i)
