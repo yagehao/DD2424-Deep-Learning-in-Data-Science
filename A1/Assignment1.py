@@ -6,15 +6,15 @@ import pickle #模块 pickle 实现了对一个 Python 对象结构的二进制�
 import numpy as np
 import matplotlib.pyplot as plt
 import unittest
-import statistics
-import re 
+from math import floor, sqrt
+from tqdm import tqdm
 
-K = 10
-n = 10000
+N = 10000
 d = 3072
+K = 10
+cifar10_labels = ["airplane","automobile","bird","cat","deer","dog","frog","horse","ship","truck"]
 
-
-def loadBatch(filename):
+def LoadBatch(filename):
 	"""Reads in the data from a CIFAR-10 batch file 
 	and returns the image and label data in separate files.
 
@@ -22,336 +22,284 @@ def loadBatch(filename):
 		filename (str): filename
 
 	Returns:
-		X (np.ndarray): image pixel data, size dxn.
+		data.T (np.ndarray): image pixel data, size dxn.
 					n: number of images, 10000.
 					d: dimensionality of each image, 3072 = 32*32*3.
-		Y (np.ndarray): one hot representation of image label, size Kxn.
+		one_hot_labels.T (np.ndarray): one hot representation of image label, size Kxn.
 					K: number of labels, 10.
-		y (np.ndarray): vector of label for each image, each entry is an integer between 0-9, length n.
+		labels (np.ndarray): vector of label for each image, each entry is an integer between 0-9, length n.
 	"""
-	with open(filename, 'rb') as f:
-		dataDict = pickle.load(f, encoding='bytes') #从已打开的 file object 文件中读取封存后的对象，
-													#重建其中特定对象的层次结构并返回。
-		X = (dataDict[bytes('data', 'utf-8')] / 255.0).T #convert entries to values between 0 and 1
-		y = np.array(dataDict[bytes('labels', 'utf-8')])
-		Y = (np.eye(10)[y]).T #one-hot vector conversion
-							  #https://stackoverflow.com/questions/45068853/how-does-this-one-hot-vector-conversion-work
-	return X, Y, y
+	data = np.zeros((N, d))
+	labels = np.zeros((N, 1))
+	one_hot_labels = np.zeros((N, K))
 
-def unpickle(filename):
-	with open(filename, 'rb') as f:
-		file_dict = pickle.load(f, encoding='bytes')
-	return file_dict
+	dict = unpickle(filename)
+	data = dict[bytes("data", 'utf-8')] / 255.0
+	labels = np.array(dict[bytes("labels", 'utf-8')])
+	one_hot_labels = OneHotEncoding(labels)
 
-def preprocess(X):
-	"""Standarization.
+	return data.T, one_hot_labels.T, labels
 
-	Args:
-		X (np.ndarray): image pixel data, size dxn.
+def unpickle(file):
+	with open(file, 'rb') as fo:
+		dict = pickle.load(fo, encoding='bytes')
+	return dict
 
-	Returns:
-		X (np.ndarray): standarized X.
-	"""
-	mean_X = np.mean(X, axis=1) #1xd
-	mean_X = mean_X[:, np.newaxis] #dx1
-
-	std_X = np.std(X, axis=1) #1xd
-	std_X = std_X[:, np.newaxis] #dx1
-
-	X = (X - mean_X)/std_X #dxn: 3072x10000
-	return X
+def OneHotEncoding(labels): 
+	"""One-Hot Encoding for categorical variables/nominal"""
+	one_hot_labels = np.zeros((N, K))
+	for i in range(len(labels)):
+		one_hot_labels[i][labels[i]] = 1
+	return one_hot_labels
 
 
 class Classifier():
-	def __init__(self, data, labels, W=None, b=None):
-		"""Construct a class.
+	def __init__(self, learning_rate, lambda_regularization, n_batch, n_epochs):
+		"""Construct a class."""		
+		np.random.seed(1)
 
-		Args:
-			data (dict):
-                - training, validation and testing:
-                    - examples matrix
-                    - one-hot-encoded labels matrix
-                    - labels vector
-			W (np.ndarray): model weight parameters, Kxd.
-			b (np.ndarray): model bias parameters, Kx1.
-		"""		
-		np.random.seed(100)
-		self.W = np.random.normal(0, 0.01, (K, d)) #initialize model parameters
-		self.b = np.random.normal(0, 0.01, (K, 1))
+		self.W = np.zeros((K, d))
+		self.b = np.zeros((K, 1))
 
-		for k, v in data.items():
-			setattr(self, k, v)
+		self.eta = learning_rate
+		self.lambda_reg = lambda_regularization
+		self.n_batch = n_batch
+		self.n_epochs = n_epochs
 
-		self.labels = labels
+		self.initialization()
 
+	def initialization(self):
+		mu = 0
+		sigma = sqrt(2) / sqrt(d)
 
-	def evaluateClassifier(self, X):
+		self.W = np.random.normal(mu, sigma, (K, d))
+		self.b = np.random.normal(mu, sigma, (K, 1))
+
+	def evaluateClassifier(self, X, W, b):
 		"""Compute p=softmax(s).
 
 		Args:
 			X (np.ndarray): data matrix, dxn.
+			W (np.ndarray): weight matrix, Kxd.
+			b (np.ndarray): bias vector, Kx1.
 			
 		Returns:
 			P (np.ndarray): softmax matrix, Kxn,
 							each col contains probability of each label 
 							for the image in the corresponding col of X.
 		"""
-		s = self.W@X + self.b 
-		P = np.exp(s - np.max(s, axis=0)) / np.exp(s - np.max(s, axis=0)).sum(axis=0)
+		s = np.dot(W, X) + b
+		P = self.softmax(s)
+		assert(P.shape == (K, X.shape[1]))
 		return P
 
+	def softmax(self, x):
+		softmax = np.exp(x) / sum(np.exp(x))
+		return softmax
 
-	def computeCost(self, X, Y, lam):
+	def computeCost(self, X, Y, W, b):
 		"""Compute cost function.
 
 		Args:
 			X (np.ndarray): data matrix, dxn
 			Y (np.ndarray): one hot representation of labels, Kxn
-			lam (float): regularization term
+			W (np.ndarray): weight matrix, Kxd.
+			b (np.ndarray): bias vector, Kx1.
 
 		Returns:
-			J (float): cross-entropy loss
+			final (float): cross-entropy loss
 		"""
-		N = X.shape[1]
+		regularization = self.lambda_reg * np.sum(np.square(W))
+		loss_sum = 0
+		for i in range(X.shape[1]):
+			x = np.zeros((d, 1))
+			y = np.zeros((K, 1))
+			x = X[:, [i]]
+			y = Y[:, [i]]
+			loss_sum += self.cross_entropy(x, y, W=W, b=b)
 
-		P = self.evaluateClassifier(X)
-		J = 1/N * - np.sum(Y*np.log(P)) + lam * np.sum(self.W**2)
-		return J
+		loss_sum /= X.shape[1]
+		final = loss_sum + regularization
+		assert(len(final) == 1)
+		return final
 
+	def cross_entropy(self, x, y, W, b):
+		l = - np.log(np.dot(y.T, self.evaluateClassifier(x, W=W, b=b)))[0]
+		return l
 
-	def computeAccuracy(self, X, y):
+	def ComputeAccuracy(self, X, Y):
 		"""Compute the accuracy of the network's predictions.
 
 		Args:
 			X (np.ndarray): data matrix, dxn.
-			y (np.ndarray): vector of labels, n.
+			Y (np.ndarray): one-hot labels, Kxn.
 
 		Returns:
 			acc (float): accuracy.
 		"""
-		pred = np.argmax(self.evaluateClassifier(X), axis=0)
-
-		pred_true = pred.T[pred == np.asarray(y)].shape[0] #https://stackoverflow.com/questions/48134598/x-shape0-vs-x0-shape-in-numpy
-
-		acc = pred_true/X.shape[1]
+		acc = 0
+		for i in range(X.shape[1]):
+			P = self.evaluateClassifier(X[:, [i]], self.W, self.b)
+			label = np.argmax(P)
+			if label == Y[i]:
+				acc += 1
+		acc /= X.shape[1]
 		return acc
 
-
-	def computeGradients(self, Xbatch, Ybatch, lam):
+	def compute_gradients(self, X, Y, P, W):
 		"""Evaluate the gradients of the cost function w.r.t. W and b.
 
 		Args:
-			Xbatch (np.ndarray): data matrix, dxn.
-			Ybatch (np.ndarray): one-hot labels, Kxn.
-			lam (float): regularization term.
+			X (np.ndarray): data matrix, dxn.
+			Y (np.ndarray): one-hot labels, Kxn.
+			W (np.ndarray): weight matrix, Kxd.
+			P (np.ndarray): softmax matrix, Kxn,
+							each col contains probability of each label 
+							for the image in the corresponding col of X.
 
 		Returns:
-			grad_W (np.ndarray): the gradient matrix of J w.r.t. W, Kxd.
-			grad_b (np.ndarray): the gradient vector of J w.r.t. b, Kx1.
+			the gradient matrix of J w.r.t. W, Kxd.
 		"""
-		N = Xbatch.shape[1]
-		Pbatch = self.evaluateClassifier(Xbatch)
-		Gbatch = -(Ybatch - Pbatch)
+		G = -(Y - P.T).T
+		return (np.dot(G,X)) / X.shape[0] + 2 * self.lambda_reg * W, np.mean(G, axis=-1, keepdims=True)
 
-		grad_W = 1/N * Gbatch@Xbatch.T + 2 * lam * self.W 
-		grad_b = np.reshape(1/N * Gbatch@np.ones(N), (Ybatch.shape[0], 1))
-		return grad_W, grad_b
+	def shuffle(self, a, b):
+		"""Shuffle the order of training data before each epoch"""
+		assert len(a) == len(b)
+		p = np.random.permutation(len(a))
+		return a[p], b[p]
 
+	def fit(self, X, Y, validationSet=[]):
+		"""Model training with mini-batch gradient descent."""
+		n = X.shape[1]
+		costsTraining = []
+		costsValidation = []
+		bestW = np.copy(self.W)
+		bestb = np.copy(self.b)
+		bestVal = self.computeCost(
+			validationSet["data"], validationSet["one_hot"], self.W, self.b)[0]
+		bestEpoch = 0
 
-	def computeGradientsNum(self, Xbatch, Ybatch, lam=0, h=1e-6):
-		"""Numerically evaluate gradients.
+		for i in tqdm(range(self.n_epochs)):
+			n_batch = floor(n / self.n_batch)
 
-		Args:
-			Xbatch (np.ndarray): data matrix, dxn.
-			Ybatch (np.ndarray): one hot labels, Kxn.
-			lam (float): regularization term.
-			h (float): marginal offset.
+			X, Y = self.shuffle(X.T, Y.T)  
+			X = X.T
+			Y = Y.T
 
-		Returns:
-			grad_W (np.ndarray): the gradient matrix of J w.r.t. W, Kxd.
-			grad_b (np.ndarray): the gradient vector of J w.r.t. b, Kx1.
-		"""
-		grad_W = np.zeros(self.W.shape)
-		grad_b = np.zeros(self.b.shape)
-
-		b_dummy = np.copy(self.b)
-		for i in range(len(self.b)):
-			self.b = b_dummy
-			self.b[i] = self.b[i] + h
-			c2 = self.computeCost(Xbatch, Ybatch, lam)
-			self.b[i] = self.b[i] - 2*h
-			c3 = self.computeCost(Xbatch, Ybatch, lam)
-			grad_b[i] = (c2-c3) / (2*h)
-
-		W_dummy = np.copy(self.W)
-		for i in np.ndindex(self.W.shape):
-			self.W = W_dummy
-			self.W[i] = self.W[i] + h
-			c2 = self.computeCost(Xbatch, Ybatch, lam)
-			self.W[i] = self.W[i] - 2*h
-			c3 = self.computeCost(Xbatch, Ybatch, lam)
-			grad_W[i] = (c2-c3) / (2*h)
-
-		return grad_W, grad_b
-
-
-	def performPlot(self, n_epochs, trainCost, valCost):
-			"""Plot performance curve of training set and validation set."""
-			epochs = np.arange(n_epochs)
-			fig, ax = plt.subplots(figsize = (8,8))
-			ax.plot(epochs, trainCost, label="training")
-			ax.plot(epochs, valCost, label="validation")
-			ax.legend()
-			ax.set(xlabel='Num of epochs', ylabel='costs')
-			ax.grid()
-			plt.savefig("Result_Pics/performance.png", bbox_inches='tight')
-
-
-	def minibatchGD(self, X, Y, lam=0, n_batch=100, eta=0.1, n_epochs=40, performPlot=True, text=True):
-		"""Model training with mini-batch gradient descent.
-
-		Args:
-			X (np.ndarray): data matrix, DxN
-			Y (np.ndarray): one hot representing label matrix, KxN
-			lam (float): regularization term.
-			n_batch (int): size of mini batches.
-			eta (float): learning rate.
-			n_epochs (int): number of runs through the whole training set.
-			performPlot (bool): decide whether to plot costs.
-			text (bool): decide whether to output
-
-		Returns:
-			trainAccu (float): accuracy of the training set.
-			valAccu (float): accuracy of the validation set.
-			testAccu (float): accuracy of the test set.
-		"""
-		if performPlot==True:
-			trainCost = np.zeros(n_epochs)
-			valCost = np.zeros(n_epochs)
-
-		for epo in range(n_epochs):
 			for j in range(n_batch):
-				N = int(X.shape[1] / n_batch)
-
-				j_start = j * N
-				j_end = (j+1) * N
+				j_start = j * self.n_batch
+				j_end = (j + 1) * self.n_batch
+				if j == n_batch - 1:
+					j_end = n
 
 				Xbatch = X[:, j_start:j_end]
 				Ybatch = Y[:, j_start:j_end]
 
-				grad_W, grad_b = self.computeGradients(Xbatch, Ybatch, lam)
-				self.W -= eta * grad_W
-				self.b -= eta * grad_b
+				Pbatch = self.evaluateClassifier(Xbatch, self.W, self.b)
+				grad_W, grad_b = self.compute_gradients(Xbatch.T, Ybatch.T, Pbatch, self.W)
 
-			if performPlot == True:
-				trainCost[epo] = self.computeCost(X, Y, lam)
-				valCost[epo] = self.computeCost(self.valX, self.valY, lam)
+				self.W -= self.eta * grad_W
+				self.b -= self.eta * grad_b
 
-		if performPlot == True:
-			self.performPlot(n_epochs, trainCost, valCost)
+			val = self.computeCost(
+				validationSet["data"], validationSet["one_hot"], self.W, self.b)[0]
+			print("Validation loss: " + str(val))
 
-		trainAccu = self.computeAccuracy(self.trainX, self.trainy)
-		valAccu = self.computeAccuracy(self.valX, self.valy)
-		testAccu = self.computeAccuracy(self.testX, self.testy)
+			if val < bestVal:
+				bestVal = np.copy(val)
+				bestW = np.copy(self.W)
+				bestb = np.copy(self.b)
+				bestEpoch = np.copy(i)
+                
+			costsTraining.append(self.computeCost(X, Y, self.W, self.b)[0])
+			costsValidation.append(val)
 
-		if text == True:
-			print("training accuracy = " + str(trainAccu))
-			print("validation accuracy = " + str(valAccu))
-			print("testing accuracy = " + str(testAccu))
+		self.W = np.copy(bestW)
+		self.b = np.copy(bestb)
+		print("Best epoch: " + str(bestEpoch))
+		print("Best cost: " + str(self.computeCost(
+			validationSet["data"], validationSet["one_hot"], self.W, self.b)[0]))
 
-		return trainAccu, valAccu, testAccu
+		plt.plot(costsTraining, label="Training cost")
+		plt.plot(costsValidation, label="Validation cost")         
+		plt.xlabel('Epoch')
+		plt.ylabel('Cost')
+		plt.title('Traning &Validation Cost')
+		plt.legend(loc='best')
+		plt.savefig("training_validation_cost.png")
+		plt.show()
+
+		# visualize the weight matrix.
+		for i, row in enumerate(self.W):
+			img = (row - row.min()) / (row.max() - row.min())
+			plt.subplot(2, 5, i + 1)
+			img = np.rot90(np.reshape(img, (32, 32, 3), order='F'), k=3)
+			plt.imshow(img)
+			plt.axis('off')
+			plt.title(cifar10_labels[i])
+		plt.savefig("weights.png")
+		plt.show()
 
 
-	def visualization(self, plotNum, save=False):
-		"""visualize the weight matrix.
+def LoadDataset():
+	trainSet = {}
+	testSet = {}
+	validationSet = {}
 
-		Args:
-			plotNum (int): number of plots.
-			save (bool): whether save the images.
-		"""
-		for i,j in enumerate(self.W):
-			j = (j - np.min(j)) / (np.max(j) - np.min(j))
+	for i in [1, 3, 4, 5]:
+		t1, t2, t3 = LoadBatch("dataset/data_batch_" + str(i))
+		if i == 1:
+			trainSet["data"] = t1
+			trainSet["one_hot"] = t2
+			trainSet["labels"] = t3
+		else:
+			trainSet["data"] = np.column_stack((trainSet["data"], t1))
+			trainSet["one_hot"] = np.column_stack((trainSet["one_hot"], t2))
+			trainSet["labels"] = np.append(trainSet["labels"], t3)
 
-			img = np.dstack((
-				j[0:1024].reshape(32, 32),
-				j[1024:2048].reshape(32, 32),
-				j[2048:].reshape(32, 32)
-				))
+	a, b, c = LoadBatch("dataset/data_batch_2")
 
-			title = re.sub('b\'', '', str(self.labels[i]))
-			title = re.sub('\'', '', title)
-			fig = plt.figure(figsize=(3, 3))
-			ax = fig.add_subplot(111)
-			ax.imshow(img, interpolation='bicubic')
-			ax.set_title('Category = ' + title, fontsize=15)
+	#k-fold cross validation
+	validationSet["data"], validationSet["one_hot"], validationSet["labels"] = a[:, :1000], b[:, :1000], c[:1000]
+	trainSet["data"] = np.column_stack((trainSet["data"], a[:, 1000:]))
+	trainSet["one_hot"] = np.column_stack((trainSet["one_hot"], b[:, 1000:]))
+	trainSet["labels"] = np.append(trainSet["labels"], c[1000:])
+	testSet["data"], testSet["one_hot"], testSet["labels"] = LoadBatch("dataset/test_batch")
 
-			if save==True:
-				plt.savefig("Result_Pics/" + str(plotNum) + "_" + title + ".png", bbox_inches="tight")
 
-			plt.show()
+	temp = np.copy(trainSet["data"]).reshape((32, 32, 3, 49000), order='F')
+	temp = np.flip(temp, 0)
+	temp = temp.reshape((3072, 49000), order='F')
+
+	trainSet["data"] = np.column_stack((trainSet["data"], temp))
+	trainSet["one_hot"] = np.column_stack((trainSet["one_hot"], trainSet["one_hot"]))
+	trainSet["labels"] = np.append(trainSet["labels"], trainSet["labels"])
+
+	mean = np.mean(trainSet["data"], axis=1)
+	mean = mean[:, np.newaxis]
+	trainSet["data"] = trainSet["data"] - mean
+	validationSet["data"] = validationSet["data"] - mean
+	testSet["data"] = testSet["data"] - mean
+	return trainSet, validationSet, testSet
 
 
 def main():
-	trainX, trainY, trainy = loadBatch("Datasets/cifar-10-batches-py/data_batch_1")
-	valX, valY, valy = loadBatch("Datasets/cifar-10-batches-py/data_batch_2")
-	testX, testY, testy = loadBatch("Datasets/cifar-10-batches-py/test_batch")
+	print("Loading dataset...")
+	trainSet, validationSet, testSet = LoadDataset()
+	print("Dataset loaded!")
 
-	trainX = preprocess(trainX)
-	valX = preprocess(valX)
-	testX = preprocess(testX)
+	lambda_regularization = 1
+	n_epochs = 40
+	n_batch= 100
+	eta = 0.001
 
-	labels = unpickle('Datasets/cifar-10-batches-py/batches.meta')[ b'label_names']
+	Exercise_1 = Classifier(eta, lambda_regularization, n_batch, n_epochs)
+	Exercise_1.fit(trainSet["data"], trainSet["one_hot"], validationSet = validationSet)
 
-	data = {
-		'trainX': trainX,
-		'trainY': trainY, 
-		'trainy': trainy,
-		'valX': valX,
-		'valY': valY,
-		'valy': valy,
-		'testX': testX,
-		'testY': testY,
-		'testy': testy
-	}
+	print("lambda=" + str(lambda_regularization) + ",", "n_epochs=" + str(n_epochs) + ",", "n_batch=" + str(n_batch) + ",", "eta=" + str(eta))
+	print("Final accuracy:" + str(Exercise_1.ComputeAccuracy(testSet["data"], testSet["labels"])))
 
-	#q4: check function run
-	clf = Classifier(data, labels)
-	P = clf.evaluateClassifier(trainX[:, :100]) #10x100
-	print("P computing completed!")
-
-	lams = [0, 0, 0.1, 1]
-	etas = [0.1, 0.01, 0.01, 0.01] 
-
-	for i in range(4):
-		print("i =", i)
-
-		trainAccuSet = []
-		valAccuSet = []
-		testAccuSet = []
-
-		for j in range(10):
-			print("j = ", j)
-
-			trainAccu, valAccu, testAccu = clf.minibatchGD(
-				trainX, trainY, lam=lams[i], eta=etas[i])
-
-			trainAccuSet.append(trainAccu)
-			valAccuSet.append(valAccu)
-			testAccuSet.append(testAccu)
-
-		print("lam = ", lams[i], "eta = ", etas[i], ':\n')
-		print("training accuracy:", trainAccuSet, '\n')
-		print("validation accuracy:", valAccuSet, '\n')
-		print("testing accuracy:", testAccuSet, '\n')
-
-		clf.visualization(plotNum=i)
-
-		print("training mean:", np.mean(trainAccuSet))
-		print("training std:", np.std(trainAccuSet))
-		print("validation mean:", np.mean(valAccuSet))
-		print("validation std:", np.std(valAccuSet))
-		print("testing mean:", np.mean(testAccuSet))
-		print("testing std:", np.std(testAccuSet))
 
 if __name__ == "__main__":
 	main()

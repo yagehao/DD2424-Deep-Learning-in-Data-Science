@@ -516,7 +516,7 @@ if __name__ == "__main__":
 
 	#replicate()
 
-	fit(valsize=1000) #adjust size of validation set
+	#fit(valsize=1000) #adjust size of validation set
 
 	#test numerically and analytically computed gradients
-	#unittest.main()
+	unittest.main()
