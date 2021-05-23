@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt 
 import unittest
 import statistics
+import random
 
 K = 10
 n = 10000
@@ -370,7 +371,7 @@ class Classifier():
 
 
 class TestEqualityMethods(unittest.TestCase):
-	def assertEqual(self, array1, array2, dec=4):
+	def assertEqual(self, array1, array2, dec=5):
 		"""Assert two arrays are equal in 4 decimal places."""
 		np.testing.assert_almost_equal(array1, array2, decimal=dec)
 
@@ -447,11 +448,12 @@ def replicate():
 			batchsize=100, eta_min=1e-5, eta_max=1e-1, n_s=800, epochs=48,
 			plot=True, text=True) #replicate figure4
 
-def fit(valsize=5000):
+def fit(lam, valsize=5000):
 	"""fit the best classifier.
 
 	Args:
 		valsize (int): size of the validation set.
+		lam (float): regularization parameter lambda.
 	"""
 	#read in all 5 batches of data
 	trainX1, trainY1, trainy1 = loadBatch("Datasets/cifar-10-batches-py/data_batch_1")
@@ -497,10 +499,10 @@ def fit(valsize=5000):
 	for i in range(1):
 		print(i)
 		clf = Classifier(data, labels)
-		trainAcc, valAcc, testAcc = clf.minibatchGD( #adjust parameters
-			data['trainX'], data['trainY'], lam=0.002,
-			batchsize=100, eta_min=1e-5, eta_max=1e-1, n_s=500,
-			epochs=20, text=False, plot=True) #two cycle
+		trainAcc, valAcc, testAcc = clf.minibatchGD( #set parameters
+			data['trainX'], data['trainY'], lam,
+			batchsize=100, eta_min=1e-5, eta_max=1e-1, n_s=400,
+			epochs=16, text=False, plot=True) #two cycle
 		acc_train_set.append(trainAcc)
 		acc_val_set.append(valAcc)
 		acc_test_set.append(testAcc)
@@ -516,7 +518,15 @@ if __name__ == "__main__":
 
 	#replicate()
 
-	#fit(valsize=1000) #adjust size of validation set
+	# coarse/fine search	
+	#for i in range(20): # set number of coarse searches
+	#	lam1 = random.uniform(0.004, 0.007) #set lambda's range of coarse search
+	#	print("lam:", lam1)
+
+	#	fit(valsize=1000, lam=lam1) #adjust size of validation set
 
 	#test numerically and analytically computed gradients
-	unittest.main()
+	#unittest.main()
+
+	# best classifier
+	fit(valsize=1000, lam=0.004167)
