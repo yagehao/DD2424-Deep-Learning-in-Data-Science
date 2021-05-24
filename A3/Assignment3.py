@@ -10,7 +10,7 @@ import scipy.sparse
 import time
 
 
-Testfriends = ["yage", "ninomiya"]
+Testfriends = ["hao", "ninomiya", "shi", "hector", "lundqvist"]
 
 # 0.1 Read in the data & get it ready
 class DataProcess:
@@ -187,7 +187,7 @@ class DataProcess:
 
 # 0.2 Set hyper-parameters & initialize the ConvNet's parameters
 class ConvNet:
-	def __init__(self, dataset, dimensions=(50, 5, 50, 3), eta=0.01, rho=0.9, batch_size=100, n_ite=1000, n_update=200):
+	def __init__(self, dataset, dimensions=(50, 5, 50, 3), eta=0.01, rho=0.9, batch_size=100, n_ite=2000, n_update=500):
 		"""initialize the ConvNet's parameters.
 
 		Args:
@@ -421,12 +421,12 @@ class ConvNet:
 				j_end = (j + 1) * self.batch_size
 				if j == n_batch - 1:
 					j_end = len(idx)
-					# j_end = n
+					#j_end = n
 
-				# idx2 = np.random.choice(np.arange(X.shape[1]), self.batch_size)
-				# idx2 = np.random.choice(idx, self.batch_size)
+				#idx2 = np.random.choice(np.arange(X.shape[1]), self.batch_size)
+				#idx2 = np.random.choice(idx, self.batch_size) # with sampling comp
 				idx2 = idx[j_start: j_end]
-				# idx2 = np.arange(j_start, j_end)
+				#idx2 = np.arange(j_start, j_end)
 				Xbatch = X[:, idx2]
 				Ybatch = Y[:, idx2]
 
@@ -544,6 +544,7 @@ class ConvNet:
 			v2 = np.dot(MjGen.T, gj)
 
 			gradF2 += v2.reshape(self.F2.shape, order='F') / n
+			"""timeit"""
 
 		G = np.dot(G.T, MF2)
 		S1 = np.where(X1 > 0, 1, 0)
@@ -556,6 +557,7 @@ class ConvNet:
 			# Mj = self.MXMatrix(
 			#     xj, self.dataset['d'], self.dimensions[1], self.dimensions[0])
 			Mj = np.asarray(MX[idx[j]].todense())
+			"""timeit"""
 			v = np.dot(gj.T, Mj)
 			gradF1 += v.reshape(self.F1.shape, order='F') / n
 

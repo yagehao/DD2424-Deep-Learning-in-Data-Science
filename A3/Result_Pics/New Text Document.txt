@@ -1,0 +1,25 @@
+[a] ite=2000
+n_batch = floor(n / self.batch_size)
+j_end = len(idx)
+idx2 [12]
+
+
+
+[b] ite=2000
+n_batch = floor(n / self.batch_size)
+j_end = n
+idx2 [12]
+
+
+[c]ite=2000
+		n_batch = floor((min_class * len(self.dataset["balance_train"])) / self.batch_size)
+					j_end = len(idx)
+[3]				idx2 = idx[j_start: j_end]
+[4]
+
+
+[d]ite=2000
+n_batch = floor((min_class * len(self.dataset["balance_train"])) / self.batch_size)
+j_end = n
+[3] 111
+[4]
