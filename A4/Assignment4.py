@@ -267,7 +267,7 @@ class RNN():
 #### Train RNN using AdaGrad ####
 def main(argv):
 	e, n, epoch = 0, 0, 0 # position in book, iteration, epoch
-	num_epochs = 2	
+	num_epochs = 30 # set epochs!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 	losses = []
 
 	data = load_data(argv[1])
@@ -301,16 +301,22 @@ def main(argv):
 		smooth_loss = 0.999 * smooth_loss + 0.001 * loss
 
 		# Print the loss
-		if n % 100 == 0:
+		if n % 100 == 0 and n < 100001:
 			losses.append(smooth_loss)
-		if n % 10000 == 0:
+		if n % 100000 == 0:
 			print('Iteration %d, smooth loss: %f' % (n, smooth_loss))
 
 		# Print synthesized text
-		if n % 10000 == 0:
+		if n % 10000 == 0 and n < 100001:
 			txt = rnn.synthesize_text(hprev, inputs[0], 200)
 			print('\nSynthesized text after %i iterations:\n %s\n' % (n, txt))
 			print('Smooth loss: %f' % smooth_loss)
+
+		if smooth_loss < 40:
+			txt = rnn.synthesize_text(hprev, inputs[0], 1000)
+			print('\nSynthesized text after %i iterations:\n %s\n' % (n, txt))
+			print('Smooth loss: %f' % smooth_loss)
+			break
 
 		# Adagrad
 		for key in rnn_params:
@@ -328,7 +334,7 @@ def plot():
 		loss_value = list(np.load("loss_value.npz.npy"))#.reshape(3102, 1))
 	#print(loss_value)
 	loss_plot = plt.plot(loss_value, label="training loss")
-	plt.xlabel('epoch (divided by 100)')
+	plt.xlabel('iterations (divided by 100)')
 	plt.ylabel('loss')
 	plt.legend()
 	plt.savefig('graph.png')
