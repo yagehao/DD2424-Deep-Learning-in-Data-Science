@@ -278,9 +278,11 @@ def LoadDataset():
 
 	mean = np.mean(trainSet["data"], axis=1)
 	mean = mean[:, np.newaxis]
-	trainSet["data"] = trainSet["data"] - mean
-	validationSet["data"] = validationSet["data"] - mean
-	testSet["data"] = testSet["data"] - mean
+	sd = np.std(trainSet["data"])
+
+	trainSet["data"] = (trainSet["data"] - mean)/sd
+	validationSet["data"] = (validationSet["data"] - mean)/sd
+	testSet["data"] = (testSet["data"] - mean)/sd
 	return trainSet, validationSet, testSet
 
 
